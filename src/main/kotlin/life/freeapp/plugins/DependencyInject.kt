@@ -19,7 +19,7 @@ fun Map<*, *>.toFfmpeg(gson: Gson): FfmpegProperty {
 
 
 private fun dependencyInjectModule(toFfmpeg: FfmpegProperty) = module {
-    single { AnalyzerService() }
+    single { AnalyzerService(get()) }
     single { FfmpegService(toFfmpeg) }
 }
 

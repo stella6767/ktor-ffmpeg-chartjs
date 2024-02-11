@@ -1,28 +1,64 @@
 package life.freeapp.service
 
+import io.ktor.http.content.*
 import life.freeapp.plugins.logger
 import java.io.File
-import java.io.IOException
-import javax.sound.sampled.AudioInputStream
+import java.text.SimpleDateFormat
+import java.util.*
 import javax.sound.sampled.AudioSystem
-import javax.sound.sampled.UnsupportedAudioFileException
 import kotlin.math.log10
 import kotlin.math.pow
 import kotlin.math.sqrt
 
 
 class AnalyzerService(
-
+    private val ffmpegService: FfmpegService
 ) {
 
     private val log = logger()
+    private val uploadFolderPath = "src/main/resources/static/upload"
+
     init {
         log.info("koin lazy init check=>${this.hashCode()}")
     }
 
-    fun analyzer(filename: String) {
-        println("????ASD?ASD?A?DA?SDA?DSs")
+    suspend fun upload(multipartData: MultiPartData) {
+
+        val part =
+            multipartData.readPart() ?: throw IllegalArgumentException("cant read file")
+
+        val fileItem = when (part) {
+            is PartData.FileItem -> {
+                part
+            }
+            else -> throw IllegalArgumentException("cant read file")
+        }
+
+        val originalName =
+            fileItem.originalFileName ?: throw IllegalArgumentException("cant read filename")
+
+        val extension = originalName.substringAfterLast('.', "")
+        if (extension != "wav") throw  IllegalArgumentException("only accept wav")
+
+        val fileBytes = fileItem.streamProvider().readAllBytes()
+        val file = File("${uploadFolderPath}/${createFilename(originalName)}")
+        file.writeBytes(fileBytes)
+
+        ffmpegService.resamplingFile(file)
+
+        part.dispose()
     }
+
+
+    private fun createFilename(filename: String): String {
+
+        val currentTimeMillis = System.currentTimeMillis()
+        val sdf = SimpleDateFormat("yyyyMMddHHmmssSSS")
+        val format = sdf.format(Date(currentTimeMillis))
+
+        return format + "__" + filename
+    }
+
 
     fun test(file: File): Double {
 
@@ -147,8 +183,6 @@ class AnalyzerService(
     fun getLoudness() {
 
     }
-
-
 
 
 }
