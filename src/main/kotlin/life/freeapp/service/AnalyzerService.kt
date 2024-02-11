@@ -4,12 +4,9 @@ import io.ktor.http.content.*
 import life.freeapp.plugins.logger
 import life.freeapp.service.dto.WaveFormDto
 import java.io.File
-import java.io.IOException
 import java.text.SimpleDateFormat
 import java.util.*
-import javax.sound.sampled.AudioInputStream
 import javax.sound.sampled.AudioSystem
-import javax.sound.sampled.UnsupportedAudioFileException
 import kotlin.math.log10
 import kotlin.math.sqrt
 
@@ -142,9 +139,9 @@ class AnalyzerService(
     }
 
 
-    fun getWaveformEnergyFromFile(wavFile: File): WaveFormDto {
+    private fun getWaveformEnergyFromFile(wavFile: File): WaveFormDto {
 
-        val audioInputStream=
+        val audioInputStream =
             AudioSystem.getAudioInputStream(wavFile)
 
         val format = audioInputStream.format
@@ -159,13 +156,16 @@ class AnalyzerService(
         val xValues: MutableList<Float> = ArrayList()
         val yValues: MutableList<Float> = ArrayList()
 
+        var rateCount = 0
+        val addCycle = 100  //100개 주기로 짤라서,
+
 
         var time = 0f
 
         while (audioInputStream.available() > 0) {
             val bytesRead = audioInputStream.read(buffer, 0, buffer.size)
             var i = 0
-            while (i < bytesRead) {
+            while (i < bytesRead ) {
                 var value = 0f
                 if (sampleSizeInBits == 16) {
                     // Convert two bytes to short (16-bit sample)
@@ -175,10 +175,14 @@ class AnalyzerService(
                     // Convert byte to float (8-bit sample)
                     value = buffer[i] / 128f // Normalize to [-1.0, 1.0]
                 }
-                xValues.add(time)
-                yValues.add(value)
+
+                if (rateCount % addCycle == 0){
+                    xValues.add(time)
+                    yValues.add(value)
+                }
                 time += 1f / sampleRate
                 i += bytesPerSample
+                rateCount++
             }
         }
 

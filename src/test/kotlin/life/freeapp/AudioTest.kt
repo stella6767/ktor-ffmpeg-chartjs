@@ -10,16 +10,39 @@ class AudioTest(
 
 ) {
 
-
-
     @Test
-    fun justTest(){
+    fun justTest() {
         println("test")
     }
 
 
+
     @Test
-    fun audioTest(){
+    fun calculateTest() {
+
+        var totalSamples = 0
+        val isLife = totalSamples < 10000
+
+        //println(totalSamples)
+        //println(100%100)
+
+        while (totalSamples < 10000) {
+            while (totalSamples % 100 == 0) {
+                println("여기==>" + totalSamples)
+
+                Thread.sleep(100)
+                totalSamples++
+            }
+            //println("여기2==>" + totalSamples)
+
+            totalSamples++
+        }
+
+    }
+
+
+    @Test
+    fun audioTest() {
 
         val filePath = "/Users/stella6767/IdeaProjects/audio-analyzer/src/test/resources/testfile/test1.wav"
         val file = File(filePath)

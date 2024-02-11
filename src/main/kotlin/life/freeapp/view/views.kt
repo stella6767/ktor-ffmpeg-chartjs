@@ -25,18 +25,62 @@ fun HTML.index() = layout {
 }
 
 
-
 fun HTML.chart(waveFormDto: WaveFormDto) = layout {
 
     h1 { +"Audio Analyzer Chart" }
-    
-    script {
-        +"console.log('hi')"
+
+    div {
+        canvas {
+            id = "myChart"
+            width = "800"
+            height = "500"
+        }
+    }
+//    script {
+//        src = "/static/js/audioChart.js"
+//    }
+    script(type = ScriptType.textJavaScript) {
+        unsafe {
+            raw("""
+           
+                  console.log(${waveFormDto.xValues})
+                  const ctx = document.getElementById('myChart');
+
+                new Chart(ctx, {
+                    type: 'line',
+                    data: {
+                        labels: ${waveFormDto.xValues},
+                        datasets: [{
+                            label: 'Waveform',
+                            data: ${waveFormDto.yValues},
+                            borderColor: 'blue',
+                            borderWidth: 1,
+                            fill: false
+                        }]
+                    },
+                    options: {
+                        responsive: false, // Adjust as needed
+                        scales: {
+                            x: {
+                                title: {
+                                    display: true,
+                                    text: 'Time'
+                                }
+                            },
+                            y: {
+                                title: {
+                                    display: true,
+                                    text: 'Amplitude'
+                                }
+                            }
+                        }
+                    }
+                });
+                
+            """)
+        }
     }
 }
-
-
-
 
 
 fun HTML.layout(body: BODY.() -> Unit) {
