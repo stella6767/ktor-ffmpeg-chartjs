@@ -2,7 +2,7 @@ package life.freeapp.view
 
 import io.ktor.http.*
 import kotlinx.html.*
-import kotlinx.html.stream.createHTML
+import life.freeapp.service.dto.WaveFormDto
 
 
 fun HTML.index() = layout {
@@ -18,15 +18,30 @@ fun HTML.index() = layout {
         input {
             type = InputType.submit
         }
+
+
+    }
+
+}
+
+
+
+fun HTML.chart(waveFormDto: WaveFormDto) = layout {
+
+    h1 { +"Audio Analyzer Chart" }
+    
+    script {
+        +"console.log('hi')"
     }
 }
 
 
 
 
-fun HTML.layout(e: BODY.() -> Unit) {
+
+fun HTML.layout(body: BODY.() -> Unit) {
     head {
-        //    script { src = "/htmx.org/$htmxVersion/dist/htmx.js" }
+        script { src = "https://cdn.jsdelivr.net/npm/chart.js" }
         //link { href = "/modest-variation.css"; rel = "stylesheet" }
         link(rel = "icon", type = ContentType.Image.JPEG.toString(), href = "/static/favicon.jpeg")
         link(rel = "shortcut icon", type = ContentType.Image.JPEG.toString(), href = "/static/favicon.jpeg")
@@ -44,6 +59,6 @@ fun HTML.layout(e: BODY.() -> Unit) {
     }
 
     body {
-        e()
+        body()
     }
 }

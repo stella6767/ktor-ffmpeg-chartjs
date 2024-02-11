@@ -1,14 +1,13 @@
 package life.freeapp.plugins
 
 import io.ktor.http.*
-import io.ktor.http.content.*
 import io.ktor.server.application.*
 import io.ktor.server.html.*
 import io.ktor.server.http.content.*
 import io.ktor.server.request.*
-import io.ktor.server.response.*
 import io.ktor.server.routing.*
 import life.freeapp.service.AnalyzerService
+import life.freeapp.view.chart
 import life.freeapp.view.index
 import org.koin.ktor.ext.inject
 
@@ -29,11 +28,15 @@ fun Application.configureRouting() {
             }
         }
         post("/upload") {
-            val multipartData = call.receiveMultipart()
-            call.respond(service.upload(multipartData))
+
+            val waveFormDto =
+                service.upload(call.receiveMultipart())
+
+            call.respondHtml(HttpStatusCode.OK) {
+                chart(waveFormDto)
+            }
+
         }
-
-
 
         staticResources("/static", "static")
     }
