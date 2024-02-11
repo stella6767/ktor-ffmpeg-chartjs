@@ -11,4 +11,5 @@ fun Application.module() {
     configureDependencyInject()
     configureHTTP()
     configureRouting()
+    configureSerialization()
 }

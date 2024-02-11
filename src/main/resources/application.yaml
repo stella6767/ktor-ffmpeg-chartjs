@@ -4,3 +4,9 @@ ktor:
       - life.freeapp.ApplicationKt.module
   deployment:
     port: 8080
+
+
+
+ffmpeg:
+  mpeg: /opt/homebrew/bin/ffmpeg
+  probe: /opt/homebrew/bin/ffprobe

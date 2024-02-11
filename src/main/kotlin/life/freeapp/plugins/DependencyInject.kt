@@ -1,18 +1,38 @@
 package life.freeapp.plugins
+
+import com.google.gson.Gson
 import io.ktor.server.application.*
+import life.freeapp.plugins.dto.FfmpegProperty
 import life.freeapp.service.AnalyzerService
+import life.freeapp.service.FfmpegService
 import org.koin.dsl.module
 import org.koin.ktor.plugin.Koin
-import org.koin.logger.SLF4JLogger
 import org.koin.logger.slf4jLogger
 
-val dependencyInjectModule = module {
-    single { AnalyzerService() }
+
+fun Map<*, *>.toFfmpeg(gson: Gson): FfmpegProperty {
+    val ffmpeg = this["ffmpeg"]
+    val jsonString = gson.toJson(ffmpeg)
+    return gson.fromJson(jsonString, FfmpegProperty::class.java)
+        ?: throw IllegalArgumentException("cant find ffmpeg property")
 }
 
+
+private fun dependencyInjectModule(toFfmpeg: FfmpegProperty) = module {
+    single { AnalyzerService() }
+    single { FfmpegService(toFfmpeg) }
+}
+
+
 fun Application.configureDependencyInject() {
-    install(Koin){
+
+    val map = environment.config.toMap()
+    val toFfmpeg = map.toFfmpeg(Gson())
+
+    install(Koin) {
         slf4jLogger()
-        modules(dependencyInjectModule)
+        modules(dependencyInjectModule(toFfmpeg))
     }
 }
+
+

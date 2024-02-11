@@ -10,6 +10,7 @@ import io.ktor.server.response.*
 import io.ktor.server.routing.*
 import kotlinx.html.*
 import life.freeapp.service.AnalyzerService
+import life.freeapp.service.FfmpegService
 import life.freeapp.view.index
 import org.koin.ktor.ext.inject
 
@@ -22,6 +23,8 @@ fun Application.configureRouting() {
 
     // Lazy inject HelloService
     val service: AnalyzerService by inject()
+    val ffmpegService: FfmpegService by inject()
+
 
     routing {
         var fileDescription = ""
