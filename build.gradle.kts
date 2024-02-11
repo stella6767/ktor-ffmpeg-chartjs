@@ -21,7 +21,14 @@ repositories {
     mavenCentral()
 }
 
+
+
 dependencies {
+    val koinVersion = "3.5.3"
+    implementation("io.insert-koin:koin-ktor:$koinVersion")
+    implementation("io.insert-koin:koin-logger-slf4j:$koinVersion")
+
+
     implementation("io.ktor:ktor-server-core-jvm")
     implementation("io.ktor:ktor-server-host-common-jvm")
     implementation("io.ktor:ktor-server-cors-jvm")

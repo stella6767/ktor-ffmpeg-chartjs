@@ -9,14 +9,20 @@ import io.ktor.server.request.*
 import io.ktor.server.response.*
 import io.ktor.server.routing.*
 import kotlinx.html.*
+import life.freeapp.service.AnalyzerService
 import life.freeapp.view.index
-import java.io.File
+import org.koin.ktor.ext.inject
+
 
 /**
  * https://ktor.io/docs/requests.html#form_data
  */
 
 fun Application.configureRouting() {
+
+    // Lazy inject HelloService
+    val service: AnalyzerService by inject()
+
     routing {
         var fileDescription = ""
         var fileName = ""
@@ -44,6 +50,8 @@ fun Application.configureRouting() {
                 }
                 part.dispose()
             }
+
+            service.analyzer(fileName)
 
             call.respondText("$fileDescription is uploaded to 'uploads/$fileName'")
         }
