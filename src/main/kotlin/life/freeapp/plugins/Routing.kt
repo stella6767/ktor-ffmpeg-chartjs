@@ -30,8 +30,7 @@ fun Application.configureRouting() {
         }
         post("/upload") {
             val multipartData = call.receiveMultipart()
-            service.upload(multipartData)
-            call.respondText("uploaded")
+            call.respond(service.upload(multipartData))
         }
 
 

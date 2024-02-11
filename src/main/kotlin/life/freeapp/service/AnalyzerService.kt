@@ -2,12 +2,15 @@ package life.freeapp.service
 
 import io.ktor.http.content.*
 import life.freeapp.plugins.logger
+import life.freeapp.service.dto.WaveFormDto
 import java.io.File
+import java.io.IOException
 import java.text.SimpleDateFormat
 import java.util.*
+import javax.sound.sampled.AudioInputStream
 import javax.sound.sampled.AudioSystem
+import javax.sound.sampled.UnsupportedAudioFileException
 import kotlin.math.log10
-import kotlin.math.pow
 import kotlin.math.sqrt
 
 
@@ -22,7 +25,7 @@ class AnalyzerService(
         log.info("koin lazy init check=>${this.hashCode()}")
     }
 
-    suspend fun upload(multipartData: MultiPartData) {
+    suspend fun upload(multipartData: MultiPartData): WaveFormDto {
 
         val part =
             multipartData.readPart() ?: throw IllegalArgumentException("cant read file")
@@ -31,6 +34,7 @@ class AnalyzerService(
             is PartData.FileItem -> {
                 part
             }
+
             else -> throw IllegalArgumentException("cant read file")
         }
 
@@ -38,15 +42,17 @@ class AnalyzerService(
             fileItem.originalFileName ?: throw IllegalArgumentException("cant read filename")
 
         val extension = originalName.substringAfterLast('.', "")
-        if (extension != "wav") throw  IllegalArgumentException("only accept wav")
+        if (extension != "wav") throw IllegalArgumentException("only accept wav")
 
         val fileBytes = fileItem.streamProvider().readAllBytes()
         val file = File("${uploadFolderPath}/${createFilename(originalName)}")
         file.writeBytes(fileBytes)
 
-        ffmpegService.resamplingFile(file)
+        val resamplingFile = ffmpegService.resamplingFile(file)
 
         part.dispose()
+
+        return getWaveformEnergyFromFile(resamplingFile)
     }
 
 
@@ -60,7 +66,7 @@ class AnalyzerService(
     }
 
 
-    fun test(file: File): Double {
+    fun testRms(file: File): Double {
 
         val audioInputStream = AudioSystem.getAudioInputStream(file)
 
@@ -136,52 +142,52 @@ class AnalyzerService(
     }
 
 
-    fun getWaveformEnergyFromFile(filePath: String): List<Double> {
-        val audioInputStream = AudioSystem.getAudioInputStream(File(filePath))
-        val sampleSize = audioInputStream.format.sampleSizeInBits / 8 // 샘플 크기 (바이트 단위)
-        val frameSize = audioInputStream.format.frameSize // 프레임 크기 (바이트 단위)
-        val buffer = ByteArray(frameSize)
-        val waveformEnergy = mutableListOf<Double>()
+    fun getWaveformEnergyFromFile(wavFile: File): WaveFormDto {
 
-        // WAV 파일을 프레임 단위로 읽어서 각 프레임의 에너지 계산
-        while (audioInputStream.read(buffer) != -1) {
-            var energy = 0.0
-            for (i in 0 until buffer.size step sampleSize) {
-                // 각 샘플의 값 읽기 (리틀 엔디언으로 인코딩된 데이터일 경우)
-                val sample = buffer[i].toInt() and 0xFF or (buffer[i + 1].toInt() shl 8) // 16비트 샘플링
-                energy += sample.toDouble().pow(2) // 샘플의 제곱을 에너지에 더함
-            }
-            waveformEnergy.add(energy)
-        }
+        val audioInputStream=
+            AudioSystem.getAudioInputStream(wavFile)
 
-        return waveformEnergy
-    }
-
-
-    fun readWavFile(audioFilePath: String) {
-
-        // WAV 파일을 읽어들임
-        val file = File(audioFilePath)
-        val audioInputStream = AudioSystem.getAudioInputStream(file)
-
-        // 오디오 파일 형식 가져오기
-        val fileFormat = AudioSystem.getAudioFileFormat(file)
         val format = audioInputStream.format
-
-        // 샘플 속도(샘플링 레이트) 가져오기
+        val frameSize = format.frameSize
+        val bytesPerSample = frameSize / format.channels
+        val sampleSizeInBits = format.sampleSizeInBits
         val sampleRate = format.sampleRate
 
+        println("!!!=>$sampleRate")
 
-        // 결과 출력
-        println("Sample Rate: $sampleRate Hz")
-        // 입력 스트림 닫기
+        val buffer = ByteArray(1024 * frameSize)
+        val xValues: MutableList<Float> = ArrayList()
+        val yValues: MutableList<Float> = ArrayList()
+
+
+        var time = 0f
+
+        while (audioInputStream.available() > 0) {
+            val bytesRead = audioInputStream.read(buffer, 0, buffer.size)
+            var i = 0
+            while (i < bytesRead) {
+                var value = 0f
+                if (sampleSizeInBits == 16) {
+                    // Convert two bytes to short (16-bit sample)
+                    val sample = ((buffer[i + 1].toInt() shl 8) or (buffer[i].toInt() and 0xFF)).toShort()
+                    value = sample / 32768f // Normalize to [-1.0, 1.0]
+                } else if (sampleSizeInBits == 8) {
+                    // Convert byte to float (8-bit sample)
+                    value = buffer[i] / 128f // Normalize to [-1.0, 1.0]
+                }
+                xValues.add(time)
+                yValues.add(value)
+                time += 1f / sampleRate
+                i += bytesPerSample
+            }
+        }
+
         audioInputStream.close()
 
-    }
-
-
-    fun getLoudness() {
-
+        return WaveFormDto(
+            xValues = xValues,
+            yValues = yValues
+        )
     }
 
 

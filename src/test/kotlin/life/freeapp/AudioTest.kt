@@ -10,7 +10,7 @@ class AudioTest(
 
 ) {
 
-    val analyzerService = AnalyzerService()
+
 
     @Test
     fun justTest(){
@@ -24,12 +24,12 @@ class AudioTest(
         val filePath = "/Users/stella6767/IdeaProjects/audio-analyzer/src/test/resources/testfile/test1.wav"
         val file = File(filePath)
 
-        val rms = analyzerService.test(file)
-        println(rms)
-        val spectrumDataFromFile = analyzerService.getSpectrumDataFromFile(filePath)
-
-        //println(spectrumDataFromFile)
-        analyzerService.readWavFile(filePath)
+//        val rms = analyzerService.testRms(file)
+//        println(rms)
+//        val spectrumDataFromFile = analyzerService.getSpectrumDataFromFile(filePath)
+//
+//        //println(spectrumDataFromFile)
+//        analyzerService.readWavFile(filePath)
 
     }
 
