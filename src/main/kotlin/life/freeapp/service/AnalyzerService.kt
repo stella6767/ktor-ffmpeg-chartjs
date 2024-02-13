@@ -3,6 +3,9 @@ package life.freeapp.service
 import io.ktor.http.content.*
 import life.freeapp.plugins.logger
 import life.freeapp.service.dto.WaveFormDto
+import org.apache.commons.math3.transform.DftNormalization
+import org.apache.commons.math3.transform.FastFourierTransformer
+import org.apache.commons.math3.transform.TransformType
 import java.io.File
 import java.text.SimpleDateFormat
 import java.util.*
@@ -10,6 +13,14 @@ import javax.sound.sampled.AudioSystem
 import kotlin.math.log10
 import kotlin.math.sqrt
 
+
+/**
+ * https://passwd.tistory.com/entry/AWS-cli-s3-%ED%8C%8C%EC%9D%BC%EB%94%94%EB%A0%89%ED%84%B0%EB%A6%AC-%EB%8B%A4%EC%9A%B4%EB%A1%9C%EB%93%9C
+ * https://panggu15.github.io/basic/sound_anal/
+ * https://github.com/csteinmetz1/pyloudnorm
+ * https://github.com/Guadalajara-KUG/Ktor-HTML/blob/master/src/main/kotlin/octuber/content/HomePage.kt
+ *
+ */
 
 class AnalyzerService(
     private val ffmpegService: FfmpegService
@@ -21,17 +32,6 @@ class AnalyzerService(
     init {
         log.info("koin lazy init check=>${this.hashCode()}")
     }
-
-
-    /**
-     * https://passwd.tistory.com/entry/AWS-cli-s3-%ED%8C%8C%EC%9D%BC%EB%94%94%EB%A0%89%ED%84%B0%EB%A6%AC-%EB%8B%A4%EC%9A%B4%EB%A1%9C%EB%93%9C
-     * https://panggu15.github.io/basic/sound_anal/
-     * https://github.com/csteinmetz1/pyloudnorm
-     * https://github.com/Guadalajara-KUG/Ktor-HTML/blob/master/src/main/kotlin/octuber/content/HomePage.kt
-     *
-     *
-     */
-
 
     suspend fun upload(multipartData: MultiPartData): WaveFormDto {
 
@@ -60,7 +60,11 @@ class AnalyzerService(
 
         part.dispose()
 
-        return getWaveformEnergyFromFile(resamplingFile)
+        val waveformEnergyFromFile = getWaveformEnergyFromFile(resamplingFile)
+
+        getFftDataFromAudioFile(resamplingFile)
+
+        return waveformEnergyFromFile
     }
 
 
@@ -122,8 +126,8 @@ class AnalyzerService(
     }
 
 
-    fun getSpectrumDataFromFile(filePath: String): List<Double> {
-        val audioInputStream = AudioSystem.getAudioInputStream(File(filePath))
+    fun getSpectrumDataFromFile(file: File): List<Double> {
+        val audioInputStream = AudioSystem.getAudioInputStream(file)
         val audioBytes = ByteArray(audioInputStream.available())
         audioInputStream.read(audioBytes)
 
@@ -149,6 +153,46 @@ class AnalyzerService(
         return spectrumData
     }
 
+
+    private fun getFftDataFromAudioFile(file: File) {
+
+        val audioInputStream = AudioSystem.getAudioInputStream(file)
+        val audioData =
+            ByteArray(audioInputStream.frameLength.toInt() * audioInputStream.format.frameSize)
+
+        audioInputStream.read(audioData)
+
+        // Step 2: Apply FFT to the audio data
+        val audioSamples = DoubleArray(audioData.size / 2) // Assuming 16-bit audio
+
+
+        for (i in audioData.indices step 2) {
+            // Convert two bytes to one short (little endian)
+            val sample = ((audioData[i].toInt() and 0xFF) or (audioData[i + 1].toInt() shl 8)).toShort()
+            audioSamples[i / 2] = sample.toDouble() / 32768.0 // Normalize to range [-1, 1]
+        }
+
+        val transformer = FastFourierTransformer(DftNormalization.STANDARD)
+        val fftResult =
+            transformer.transform(audioSamples, TransformType.FORWARD)
+
+
+        // Step 3: Extract frequency bins and magnitudes
+        val n = fftResult.size
+        val freq = DoubleArray(n)
+        val mag = DoubleArray(n)
+        for (i in 0 until n) {
+            freq[i] = (audioInputStream.format.sampleRate * i) / n.toDouble()
+            mag[i] = fftResult[i].abs()
+        }
+
+        // Print or use the freq and mag arrays as needed
+        for (i in 0 until n) {
+            println("Frequency: " + freq[i] + " Hz, Magnitude: " + mag[i])
+        }
+
+        audioInputStream.close()
+    }
 
     private fun getWaveformEnergyFromFile(wavFile: File): WaveFormDto {
 
@@ -176,7 +220,7 @@ class AnalyzerService(
         while (audioInputStream.available() > 0) {
             val bytesRead = audioInputStream.read(buffer, 0, buffer.size)
             var i = 0
-            while (i < bytesRead ) {
+            while (i < bytesRead) {
                 var value = 0f
                 if (sampleSizeInBits == 16) {
                     // Convert two bytes to short (16-bit sample)
@@ -187,7 +231,7 @@ class AnalyzerService(
                     value = buffer[i] / 128f // Normalize to [-1.0, 1.0]
                 }
 
-                if (rateCount % addCycle == 0){
+                if (rateCount % addCycle == 0) {
                     xValues.add(time)
                     yValues.add(value)
                 }

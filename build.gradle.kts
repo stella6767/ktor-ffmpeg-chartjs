@@ -29,6 +29,7 @@ dependencies {
     implementation("io.insert-koin:koin-logger-slf4j:$koinVersion")
 
     implementation("net.bramp.ffmpeg:ffmpeg:0.7.0")
+    implementation("org.apache.commons:commons-math3:3.6.1")
 
 
 
