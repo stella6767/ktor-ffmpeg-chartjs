@@ -2,51 +2,79 @@ package life.freeapp.view
 
 import io.ktor.http.*
 import kotlinx.html.*
+import kotlinx.html.stream.createHTML
 import life.freeapp.service.dto.WaveFormDto
 
 
+
+
+
+
 fun HTML.index() = layout {
-    h1 { +"Audio Analyzer" }
+    h1 { +"FFMPEG + KTOR + HTMX Audio Analyzer" }
     form {
-        method = FormMethod.post
-        action = "/upload"
-        encType = FormEncType.multipartFormData
+        id = "file-form"
+        attributes["hx-post"] = "/upload"
+        attributes["hx-encoding"] = "multipart/form-data"
+//        attributes["hx-target"] = "body"
         input {
             type = InputType.file
             name = "file"
         }
-        input {
-            type = InputType.submit
+        button {
+            +"upload"
         }
+        progress {
+            id = "progress"
+            value = "0"
+            max = "100"
+        }
+    }
 
-
+    script(type = ScriptType.textJavaScript) {
+        unsafe {
+            raw(
+                """
+                htmx.on('#file-form', 'htmx:xhr:progress', function(evt) {
+                  htmx.find('#progress').setAttribute('value', evt.detail.loaded/evt.detail.total * 100)
+                });
+            """.trimIndent()
+            )
+        }
     }
 
 }
 
+fun chart(waveFormDto: WaveFormDto): String {
 
-fun HTML.chart(waveFormDto: WaveFormDto) = layout {
-
-    h1 { +"Audio Analyzer Chart" }
-
-    div {
-        canvas {
-            id = "myChart"
-            width = "800"
-            height = "500"
+    return createHTML().body {
+        div {
+            canvas {
+                id = "myChart"
+                width = "1000"
+                height = "500"
+            }
         }
+
+        chartJsScript(waveFormDto)
     }
-//    script {
-//        src = "/static/js/audioChart.js"
-//    }
+}
+
+
+fun HtmlBlockTag.test(){
+    div {  }
+}
+
+private fun BODY.chartJsScript(waveFormDto: WaveFormDto) {
     script(type = ScriptType.textJavaScript) {
         unsafe {
-            raw("""
-           
+            raw(
+                """
+
                   console.log(${waveFormDto.xValues})
                   const ctx = document.getElementById('myChart');
 
-                new Chart(ctx, {
+                    new Chart(ctx, {
                     type: 'line',
                     data: {
                         labels: ${waveFormDto.xValues},
@@ -76,8 +104,9 @@ fun HTML.chart(waveFormDto: WaveFormDto) = layout {
                         }
                     }
                 });
-                
-            """)
+
+            """
+            )
         }
     }
 }
@@ -86,10 +115,14 @@ fun HTML.chart(waveFormDto: WaveFormDto) = layout {
 fun HTML.layout(body: BODY.() -> Unit) {
     head {
         script { src = "https://cdn.jsdelivr.net/npm/chart.js" }
-        //link { href = "/modest-variation.css"; rel = "stylesheet" }
+        script {
+            src = "https://unpkg.com/htmx.org@1.9.10"
+            integrity = "sha384-D1Kt99CQMDuVetoL1lrYwg5t+9QdHe7NLX/SoJYkXDFfX37iInKRy5xLSi8nO7UC"
+            attributes["crossorigin"] = "anonymous"
+        }
+
         link(rel = "icon", type = ContentType.Image.JPEG.toString(), href = "/static/favicon.jpeg")
         link(rel = "shortcut icon", type = ContentType.Image.JPEG.toString(), href = "/static/favicon.jpeg")
-
         link(rel = "stylesheet", href = "https://cdn.simplecss.org/simple.min.css")
         link(rel = "stylesheet", href = "/styles.css", type = "text/css")
         meta {
@@ -106,3 +139,6 @@ fun HTML.layout(body: BODY.() -> Unit) {
         body()
     }
 }
+
+
+

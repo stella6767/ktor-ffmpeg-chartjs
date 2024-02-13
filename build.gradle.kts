@@ -36,7 +36,7 @@ dependencies {
     implementation("io.ktor:ktor-server-host-common-jvm")
     implementation("io.ktor:ktor-server-cors-jvm")
     implementation("io.ktor:ktor-server-html-builder-jvm")
-    //runtimeOnly("org.jetbrains:kotlinx-html:0.11.0")
+    runtimeOnly("org.jetbrains:kotlinx-html:0.11.0")
     implementation("io.ktor:ktor-serialization-gson:$ktor_version")
     implementation("io.ktor:ktor-server-content-negotiation-jvm:$ktor_version")
     implementation("io.ktor:ktor-server-netty-jvm")

@@ -22,6 +22,17 @@ class AnalyzerService(
         log.info("koin lazy init check=>${this.hashCode()}")
     }
 
+
+    /**
+     * https://passwd.tistory.com/entry/AWS-cli-s3-%ED%8C%8C%EC%9D%BC%EB%94%94%EB%A0%89%ED%84%B0%EB%A6%AC-%EB%8B%A4%EC%9A%B4%EB%A1%9C%EB%93%9C
+     * https://panggu15.github.io/basic/sound_anal/
+     * https://github.com/csteinmetz1/pyloudnorm
+     * https://github.com/Guadalajara-KUG/Ktor-HTML/blob/master/src/main/kotlin/octuber/content/HomePage.kt
+     *
+     *
+     */
+
+
     suspend fun upload(multipartData: MultiPartData): WaveFormDto {
 
         val part =

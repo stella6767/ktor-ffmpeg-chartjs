@@ -5,7 +5,9 @@ import io.ktor.server.application.*
 import io.ktor.server.html.*
 import io.ktor.server.http.content.*
 import io.ktor.server.request.*
+import io.ktor.server.response.*
 import io.ktor.server.routing.*
+import kotlinx.html.HtmlBlockTag
 import life.freeapp.service.AnalyzerService
 import life.freeapp.view.chart
 import life.freeapp.view.index
@@ -28,11 +30,10 @@ fun Application.configureRouting() {
             }
         }
         post("/upload") {
-
             val waveFormDto =
                 service.upload(call.receiveMultipart())
 
-            call.respondHtml(HttpStatusCode.OK) {
+            call.respondText {
                 chart(waveFormDto)
             }
 
