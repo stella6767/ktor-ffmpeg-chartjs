@@ -7,9 +7,8 @@ import io.ktor.server.http.content.*
 import io.ktor.server.request.*
 import io.ktor.server.response.*
 import io.ktor.server.routing.*
-import kotlinx.html.HtmlBlockTag
 import life.freeapp.service.AnalyzerService
-import life.freeapp.view.chart
+import life.freeapp.view.charts
 import life.freeapp.view.index
 import org.koin.ktor.ext.inject
 
@@ -30,13 +29,13 @@ fun Application.configureRouting() {
             }
         }
         post("/upload") {
-            val waveFormDto =
+
+            val analyzerDto =
                 service.upload(call.receiveMultipart())
 
             call.respondText {
-                chart(waveFormDto)
+                charts(analyzerDto)
             }
-
         }
 
         staticResources("/static", "static")

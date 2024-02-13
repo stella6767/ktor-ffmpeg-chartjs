@@ -2,7 +2,9 @@ package life.freeapp.service
 
 import io.ktor.http.content.*
 import life.freeapp.plugins.logger
-import life.freeapp.service.dto.WaveFormDto
+import life.freeapp.service.dto.AudioAnalyzerDto
+import life.freeapp.service.dto.ChartDto
+import org.apache.commons.math3.complex.Complex
 import org.apache.commons.math3.transform.DftNormalization
 import org.apache.commons.math3.transform.FastFourierTransformer
 import org.apache.commons.math3.transform.TransformType
@@ -33,7 +35,7 @@ class AnalyzerService(
         log.info("koin lazy init check=>${this.hashCode()}")
     }
 
-    suspend fun upload(multipartData: MultiPartData): WaveFormDto {
+    suspend fun upload(multipartData: MultiPartData): AudioAnalyzerDto {
 
         val part =
             multipartData.readPart() ?: throw IllegalArgumentException("cant read file")
@@ -42,7 +44,6 @@ class AnalyzerService(
             is PartData.FileItem -> {
                 part
             }
-
             else -> throw IllegalArgumentException("cant read file")
         }
 
@@ -60,11 +61,10 @@ class AnalyzerService(
 
         part.dispose()
 
-        val waveformEnergyFromFile = getWaveformEnergyFromFile(resamplingFile)
-
-        getFftDataFromAudioFile(resamplingFile)
-
-        return waveformEnergyFromFile
+        return AudioAnalyzerDto(
+            waveForm = getWaveformEnergyFromFile(resamplingFile),
+            fftData = getFftDataFromAudioFile(resamplingFile)
+        )
     }
 
 
@@ -154,47 +154,54 @@ class AnalyzerService(
     }
 
 
-    private fun getFftDataFromAudioFile(file: File) {
+    private fun getFftDataFromAudioFile(file: File): ChartDto {
 
         val audioInputStream = AudioSystem.getAudioInputStream(file)
-        val audioData =
-            ByteArray(audioInputStream.frameLength.toInt() * audioInputStream.format.frameSize)
+        val audioData = audioInputStream.readAllBytes()
 
-        audioInputStream.read(audioData)
-
-        // Step 2: Apply FFT to the audio data
-        val audioSamples = DoubleArray(audioData.size / 2) // Assuming 16-bit audio
+        val n = audioData.size
+        val audioSamples = DoubleArray(n / 2)
+        val sampleRate = 1378 //1378  22050
 
 
-        for (i in audioData.indices step 2) {
+        var i = 0
+        var j = 0
+
+        while (i < audioData.size) {
             // Convert two bytes to one short (little endian)
-            val sample = ((audioData[i].toInt() and 0xFF) or (audioData[i + 1].toInt() shl 8)).toShort()
-            audioSamples[i / 2] = sample.toDouble() / 32768.0 // Normalize to range [-1, 1]
+            val sample = ((audioData[i].toInt() and 0xFF) or (audioData[i + 1].toInt() shl 8))
+            audioSamples[j] = sample / 32768.0; // Normalize to range [-1, 1]
+            i += 2
+            j++
         }
+
+        // Pad the audio samples to the next power of two
+        val paddedSamples = padToNextPowerOfTwo(audioSamples)
 
         val transformer = FastFourierTransformer(DftNormalization.STANDARD)
-        val fftResult =
-            transformer.transform(audioSamples, TransformType.FORWARD)
+        val fftResult: Array<Complex> = transformer.transform(paddedSamples, TransformType.FORWARD)
+
+        val magnitude = DoubleArray(fftResult.size)
+        val frequencies = DoubleArray(fftResult.size)
+
+        val deltaFrequency = sampleRate / n
 
 
-        // Step 3: Extract frequency bins and magnitudes
-        val n = fftResult.size
-        val freq = DoubleArray(n)
-        val mag = DoubleArray(n)
-        for (i in 0 until n) {
-            freq[i] = (audioInputStream.format.sampleRate * i) / n.toDouble()
-            mag[i] = fftResult[i].abs()
+        for (i in fftResult.indices) {
+            magnitude[i] = fftResult[i].abs()
+            frequencies[i] = i * deltaFrequency.toDouble()
         }
 
-        // Print or use the freq and mag arrays as needed
-        for (i in 0 until n) {
-            println("Frequency: " + freq[i] + " Hz, Magnitude: " + mag[i])
-        }
-
-        audioInputStream.close()
+        return ChartDto(
+            xValues = frequencies.toList().filterIndexed { index, _ -> index % 100 == 0 },
+            yValues = magnitude.toList().filterIndexed { index, _ -> index % 100 == 0 },
+            label = "PowerSpectrum"
+        )
     }
 
-    private fun getWaveformEnergyFromFile(wavFile: File): WaveFormDto {
+
+
+    private fun getWaveformEnergyFromFile(wavFile: File): ChartDto {
 
         val audioInputStream =
             AudioSystem.getAudioInputStream(wavFile)
@@ -208,8 +215,8 @@ class AnalyzerService(
         println("!!!=>$sampleRate")
 
         val buffer = ByteArray(1024 * frameSize)
-        val xValues: MutableList<Float> = ArrayList()
-        val yValues: MutableList<Float> = ArrayList()
+        val xValues: MutableList<Double> = ArrayList()
+        val yValues: MutableList<Double> = ArrayList()
 
         var rateCount = 0
         val addCycle = 100  //100개 주기로 짤라서,
@@ -232,8 +239,8 @@ class AnalyzerService(
                 }
 
                 if (rateCount % addCycle == 0) {
-                    xValues.add(time)
-                    yValues.add(value)
+                    xValues.add(time.toDouble())
+                    yValues.add(value.toDouble())
                 }
                 time += 1f / sampleRate
                 i += bytesPerSample
@@ -243,11 +250,31 @@ class AnalyzerService(
 
         audioInputStream.close()
 
-        return WaveFormDto(
-            xValues = xValues,
-            yValues = yValues
+        return ChartDto(
+            xValues = xValues.toList(),
+            yValues = yValues.toList(),
+            label = "waveForm"
         )
     }
+
+
+
+    fun padToNextPowerOfTwo(data: DoubleArray): DoubleArray {
+        var length = data.size
+        var nextPowerOfTwo = 1
+        while (nextPowerOfTwo < length) {
+            nextPowerOfTwo *= 2
+        }
+        if (nextPowerOfTwo != length) {
+            val paddedData = DoubleArray(nextPowerOfTwo)
+            for (i in data.indices) {
+                paddedData[i] = data[i]
+            }
+            return paddedData
+        }
+        return data
+    }
+
 
 
 }

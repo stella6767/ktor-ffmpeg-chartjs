@@ -16,6 +16,18 @@ class AudioTest(
     }
 
 
+    @Test
+    fun sliceTest(){
+
+        val myList = listOf(1, 2, 3, 4, 5, 6, 7, 8, 9, 10)
+
+        val slicedList = myList.filterIndexed { index, _ -> index % 3 == 0 }
+
+        println(slicedList)
+
+    }
+
+
 
     @Test
     fun calculateTest() {

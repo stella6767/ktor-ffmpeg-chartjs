@@ -3,11 +3,8 @@ package life.freeapp.view
 import io.ktor.http.*
 import kotlinx.html.*
 import kotlinx.html.stream.createHTML
-import life.freeapp.service.dto.WaveFormDto
-
-
-
-
+import life.freeapp.service.dto.AudioAnalyzerDto
+import life.freeapp.service.dto.ChartDto
 
 
 fun HTML.index() = layout {
@@ -45,63 +42,60 @@ fun HTML.index() = layout {
 
 }
 
-fun chart(waveFormDto: WaveFormDto): String {
+
+fun charts(analyzerDto: AudioAnalyzerDto): String {
+
+    val (waveForm, fft) = analyzerDto
 
     return createHTML().body {
-        div {
-            canvas {
-                id = "myChart"
-                width = "1000"
-                height = "500"
-            }
-        }
 
-        chartJsScript(waveFormDto)
+        chart(waveForm)
+        chart(fft)
+
+        chartJsScript(waveForm.xValues, waveForm.yValues, waveForm.label)
+        chartJsScript(fft.xValues, fft.yValues, fft.label)
+    }
+}
+
+fun BODY.chart(chartDto: ChartDto) {
+    div {
+        canvas {
+            id = "${chartDto.label}"
+            width = "1000"
+            height = "500"
+        }
     }
 }
 
 
-fun HtmlBlockTag.test(){
-    div {  }
+fun HtmlBlockTag.test() {
+    div { }
 }
 
-private fun BODY.chartJsScript(waveFormDto: WaveFormDto) {
+private fun BODY.chartJsScript(
+    xValues: List<Double>,
+    yValues: List<Double>,
+    label: String
+) {
     script(type = ScriptType.textJavaScript) {
         unsafe {
             raw(
-                """
+                """                
+                  console.log($xValues)  
+                                          
+                  const $label = document.getElementById('$label');
 
-                  console.log(${waveFormDto.xValues})
-                  const ctx = document.getElementById('myChart');
-
-                    new Chart(ctx, {
+                    new Chart('$label', {
                     type: 'line',
                     data: {
-                        labels: ${waveFormDto.xValues},
+                        labels: ${xValues},
                         datasets: [{
-                            label: 'Waveform',
-                            data: ${waveFormDto.yValues},
+                            label: '$label',
+                            data: ${yValues},
                             borderColor: 'blue',
                             borderWidth: 1,
                             fill: false
                         }]
-                    },
-                    options: {
-                        responsive: false, // Adjust as needed
-                        scales: {
-                            x: {
-                                title: {
-                                    display: true,
-                                    text: 'Time'
-                                }
-                            },
-                            y: {
-                                title: {
-                                    display: true,
-                                    text: 'Amplitude'
-                                }
-                            }
-                        }
                     }
                 });
 
