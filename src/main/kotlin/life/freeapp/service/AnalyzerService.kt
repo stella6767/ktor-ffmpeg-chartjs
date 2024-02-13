@@ -88,59 +88,77 @@ class AnalyzerService(
     fun getRmsEnergy(file: File): ChartDto {
 
         val audioInputStream = AudioSystem.getAudioInputStream(file)
-        // Read the audio data into a byte array
-        val audioData = ByteArray(audioInputStream.available())
-        audioInputStream.read(audioData)
+        // 오디오 포맷 정보 가져오기
+        val format = audioInputStream.format
 
-        // Calculate RMS energy
-        val rmsEnergy = calculateRMSEnergy(audioData)
+        // 오디오 데이터를 읽기 위한 바이트 배열
+        val buffer = ByteArray(audioInputStream.available())
+        var bytesRead = 0
 
-        // Convert RMS energy to decibels (dB)
-        val rmsEnergydB = 20 * Math.log10(rmsEnergy)
+        // 오디오 데이터를 바이트 배열로 읽어오기
+        while (audioInputStream.available() > 0) {
+            bytesRead += audioInputStream.read(buffer, bytesRead, buffer.size - bytesRead)
+        }
 
-        // Sample rate of the audio file (Hz)
-        val sampleRate = audioInputStream.format.sampleRate
+        // 읽은 바이트 배열을 double 배열로 변환
+        val audioData = DoubleArray(bytesRead / 2)  // 16-bit PCM이므로 2로 나누어야 함
 
-        // Calculate time values (x) based on the number of samples and the sample rate
-        val perSample = audioData.size / 2  // Assuming 16-bit audio samples (2 bytes per sample)
-        val duration = perSample.toDouble() / sampleRate
-        val timeValues = DoubleArray(perSample) { it.toDouble() / sampleRate }
+        // 16-bit PCM 데이터를 double로 변환
+        for (i in 0 until bytesRead / 2) {
+            val sample = (buffer[i * 2 + 1].toInt() shl 8 or (buffer[i * 2].toInt() and 0xFF)).toDouble()
+            audioData[i] = sample / 32768.0  // Normalize to range [-1.0, 1.0]
+        }
 
-        // Fill the decibel energy values (y) with the calculated RMS energy in dB
-        val decibelEnergyValues = DoubleArray(perSample) { rmsEnergydB }
+        // AudioInputStream 닫기
+        audioInputStream.close()
 
-        // Optionally, you can print the time and decibel energy values
-        println("Time (s)\tDecibel Energy (dB)")
+        val rms = calculateRMS(audioData)
+        val times = timesLike(rms, 1378)
+        val rmsDB = amplitudeToDB(rms)
 
-//        for (i in timeValues.indices) {
-//            println("${timeValues[i]}\t${decibelEnergyValues[i]}")
-//        }
 
         return ChartDto(
-            xValues = timeValues.toList(),
-            yValues = decibelEnergyValues.toList(),
+            xValues = times.toList(),
+            yValues = rmsDB.toList(),
             "RmsEnergy"
         )
     }
 
-
-    fun calculateRMSEnergy(audioData: ByteArray): Double {
-        var sumSquared = 0.0
-        val numSamples = audioData.size / 2  // Assuming 16-bit audio samples (2 bytes per sample)
-
-        for (sampleIndex in 0 until numSamples) {
-            // Convert two bytes to one short (little endian)
-            val sample = (audioData[sampleIndex * 2].toInt() and 0xFF) or (audioData[sampleIndex * 2 + 1].toInt() shl 8)
-            // Normalize to range [-1.0, 1.0]
-            val normalizedSample = sample / 32768.0
-            // Add squared sample to sum
-            sumSquared += normalizedSample.pow(2)
-        }
-
-        // Calculate RMS energy
-        return sqrt(sumSquared / numSamples)
+    private fun timesLike(rmsValues: DoubleArray, sr: Int): DoubleArray {
+        val hopLength = 256  // Assuming hop length used during calculation of RMS
+        return DoubleArray(rmsValues.size) { it * hopLength.toDouble() / sr.toDouble() }
     }
 
+    private fun amplitudeToDB(rmsValues: DoubleArray): DoubleArray {
+        val refValue = 1.0  // Reference value for dB calculation (default: 1.0)
+        val amin = 1e-10  // Minimum amplitude (default: 1e-10)
+        return DoubleArray(rmsValues.size) { 20.0 * log10(maxOf(amin, rmsValues[it]) / refValue) }
+    }
+
+    private fun calculateRMS(y: DoubleArray): DoubleArray {
+        val windowSize = 1024  // Choose an appropriate window size
+        val hopLength = windowSize / 4  // Choose an appropriate hop length
+
+        val numWindows = (y.size - windowSize) / hopLength + 1
+        val rmsValues = DoubleArray(numWindows)
+
+        for (i in 0 until numWindows) {
+            val startIdx = i * hopLength
+            val endIdx = startIdx + windowSize
+            var sumSquared = 0.0
+
+            for (j in startIdx until endIdx) {
+                if (j < y.size) {
+                    sumSquared += y[j].pow(2)
+                }
+            }
+
+            val rms = sqrt(sumSquared / windowSize)
+            rmsValues[i] = rms
+        }
+
+        return rmsValues
+    }
 
 
 
