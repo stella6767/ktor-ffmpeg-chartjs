@@ -11,9 +11,9 @@ import org.apache.commons.math3.transform.TransformType
 import java.io.File
 import java.text.SimpleDateFormat
 import java.util.*
+import javax.sound.sampled.AudioInputStream
 import javax.sound.sampled.AudioSystem
-import kotlin.math.log10
-import kotlin.math.sqrt
+import kotlin.math.*
 
 
 /**
@@ -44,6 +44,7 @@ class AnalyzerService(
             is PartData.FileItem -> {
                 part
             }
+
             else -> throw IllegalArgumentException("cant read file")
         }
 
@@ -59,11 +60,17 @@ class AnalyzerService(
 
         val resamplingFile = ffmpegService.resamplingFile(file)
 
+
         part.dispose()
+
+
 
         return AudioAnalyzerDto(
             waveForm = getWaveformEnergyFromFile(resamplingFile),
-            fftData = getFftDataFromAudioFile(resamplingFile)
+            fftData = getFftDataFromAudioFile(resamplingFile),
+            stftData = getSpectrumDataFromFile(resamplingFile),
+            getRmsEnergy(resamplingFile)
+
         )
     }
 
@@ -78,81 +85,130 @@ class AnalyzerService(
     }
 
 
-    fun testRms(file: File): Double {
+    fun getRmsEnergy(file: File): ChartDto {
 
         val audioInputStream = AudioSystem.getAudioInputStream(file)
+        // Read the audio data into a byte array
+        val audioData = ByteArray(audioInputStream.available())
+        audioInputStream.read(audioData)
 
-        val bytes = audioInputStream.readAllBytes()
+        // Calculate RMS energy
+        val rmsEnergy = calculateRMSEnergy(audioData)
 
-        val sampleSizeInBits = audioInputStream.format.sampleSizeInBits
-        val bytesPerSample = sampleSizeInBits / 8
+        // Convert RMS energy to decibels (dB)
+        val rmsEnergydB = 20 * Math.log10(rmsEnergy)
 
-        var sum = 0.0
-        for (i in bytes.indices step bytesPerSample) {
-            // Convert bytes to signed 16-bit samples
-            val sample = bytes[i].toInt() or (bytes[i + 1].toInt() shl 8)
-            sum += sample * sample
-        }
+        // Sample rate of the audio file (Hz)
+        val sampleRate = audioInputStream.format.sampleRate
 
-        val rms = sqrt(sum / (bytes.size / bytesPerSample))
+        // Calculate time values (x) based on the number of samples and the sample rate
+        val perSample = audioData.size / 2  // Assuming 16-bit audio samples (2 bytes per sample)
+        val duration = perSample.toDouble() / sampleRate
+        val timeValues = DoubleArray(perSample) { it.toDouble() / sampleRate }
 
-        return rms
+        // Fill the decibel energy values (y) with the calculated RMS energy in dB
+        val decibelEnergyValues = DoubleArray(perSample) { rmsEnergydB }
+
+        // Optionally, you can print the time and decibel energy values
+        println("Time (s)\tDecibel Energy (dB)")
+
+//        for (i in timeValues.indices) {
+//            println("${timeValues[i]}\t${decibelEnergyValues[i]}")
+//        }
+
+        return ChartDto(
+            xValues = timeValues.toList(),
+            yValues = decibelEnergyValues.toList(),
+            "RmsEnergy"
+        )
     }
 
 
-    fun test2(file: File) {
+    fun calculateRMSEnergy(audioData: ByteArray): Double {
+        var sumSquared = 0.0
+        val numSamples = audioData.size / 2  // Assuming 16-bit audio samples (2 bytes per sample)
 
-        val audioInputStream = AudioSystem.getAudioInputStream(file)
-        val format = audioInputStream.format
+        for (sampleIndex in 0 until numSamples) {
+            // Convert two bytes to one short (little endian)
+            val sample = (audioData[sampleIndex * 2].toInt() and 0xFF) or (audioData[sampleIndex * 2 + 1].toInt() shl 8)
+            // Normalize to range [-1.0, 1.0]
+            val normalizedSample = sample / 32768.0
+            // Add squared sample to sum
+            sumSquared += normalizedSample.pow(2)
+        }
 
-        // 읽을 샘플 수 설정 (1초 분량의 샘플)
-        val bufferSize = format.frameSize * format.frameRate.toInt()
-        val buffer = ByteArray(bufferSize)
+        // Calculate RMS energy
+        return sqrt(sumSquared / numSamples)
+    }
 
-        var sum = 0.0
-        var count = 0
 
-        // 파일에서 반복하여 샘플을 읽고 RMS 에너지 계산
-        var bytesRead: Int
-        while (audioInputStream.read(buffer).also { bytesRead = it } != -1) {
-            for (i in 0 until bytesRead step format.frameSize) {
-                // Convert bytes to signed 16-bit samples
-                val sample = buffer[i].toInt() or (buffer[i + 1].toInt() shl 8)
-                sum += sample * sample
-                count++
+
+
+    private fun getSpectrumDataFromFile(
+        audioFile: File,
+        windowSize: Int = 1024,
+        hopSize: Int = windowSize / 2
+    ): ChartDto {
+
+        val audioInputStream: AudioInputStream = AudioSystem.getAudioInputStream(audioFile)
+        val audioBytes = audioInputStream.readAllBytes()
+        val audioData = audioBytes.map { it.toDouble() }.toDoubleArray()
+
+        // Perform STFT and calculate decibel values
+        val sampleRate = audioInputStream.format.sampleRate.toDouble()
+        val windowSize = 1024 // Adjust as needed
+        val overlap = windowSize / 2 // Adjust as needed
+        val fft = FastFourierTransformer(DftNormalization.STANDARD)
+        val hopSize = windowSize - overlap
+        val numFrames = (audioData.size - windowSize) / hopSize + 1
+        val xValues = mutableListOf<Double>()
+        val yValues = mutableListOf<Double>()
+
+        for (i in 0 until numFrames) {
+            val startIdx = i * hopSize
+            val frame = audioData.copyOfRange(startIdx, startIdx + windowSize)
+            val fftResult = fft.transform(frame, TransformType.FORWARD)
+
+            // Convert FFT result to magnitude and calculate decibel
+            val magnitude = fftResult.map { it.abs() }
+            val decibel = magnitude.map { 20 * log10(it) }
+
+            // Add time value to xValues array (you can use frame index or another time value)
+            xValues.add(i.toDouble())
+            // Add decibel values to yValues array
+            yValues.addAll(decibel)
+        }
+
+        return ChartDto(
+            xValues = xValues,
+            yValues = yValues,
+            "Spectrum"
+        )
+    }
+
+    private fun applyWindow(data: ByteArray, windowSize: Int, bytesPerSample: Int): DoubleArray {
+        val windowedData = DoubleArray(windowSize)
+        for (i in 0 until windowSize) {
+            var value = 0
+            for (j in 0 until bytesPerSample) {
+                value = value or ((data[i * bytesPerSample + j].toInt() and 0xFF) shl (j * 8))
             }
+            windowedData[i] = value * hammingWindow(i, windowSize)
         }
-        val rms = sqrt(sum / count)
+        return windowedData
     }
 
-
-    fun getSpectrumDataFromFile(file: File): List<Double> {
-        val audioInputStream = AudioSystem.getAudioInputStream(file)
-        val audioBytes = ByteArray(audioInputStream.available())
-        audioInputStream.read(audioBytes)
-
-        // 주파수 영역의 크기 설정 (FFT를 위해 2의 제곱수 사용)
-        val fftSize = 2048
-
-        // FFT 수행
-        val fft = DoubleArray(fftSize)
-        for (i in 0 until fftSize) {
-            val j = i * 2
-            fft[i] = ((audioBytes[j].toInt() shl 8) + audioBytes[j + 1].toInt()).toDouble()
-        }
-
-        // FFT 결과를 주파수 스펙트럼으로 변환
-        val spectrumData = mutableListOf<Double>()
-        for (i in 0 until fftSize step 2) {
-            val re = fft[i]
-            val im = fft[i + 1]
-            val magnitude = 2 * log10(sqrt(re * re + im * im))
-            spectrumData.add(magnitude)
-        }
-
-        return spectrumData
+    private fun hammingWindow(n: Int, windowSize: Int): Double {
+        return 0.54 - 0.46 * cos(2 * Math.PI * n / (windowSize - 1))
     }
 
+    private fun extractChannel(data: DoubleArray, channelIndex: Int, numChannels: Int): DoubleArray {
+        val channelData = DoubleArray(data.size / numChannels)
+        for (i in channelData.indices) {
+            channelData[i] = data[i * numChannels + channelIndex]
+        }
+        return channelData
+    }
 
     private fun getFftDataFromAudioFile(file: File): ChartDto {
 
@@ -198,7 +254,6 @@ class AnalyzerService(
             label = "PowerSpectrum"
         )
     }
-
 
 
     private fun getWaveformEnergyFromFile(wavFile: File): ChartDto {
@@ -258,8 +313,7 @@ class AnalyzerService(
     }
 
 
-
-    fun padToNextPowerOfTwo(data: DoubleArray): DoubleArray {
+    private fun padToNextPowerOfTwo(data: DoubleArray): DoubleArray {
         var length = data.size
         var nextPowerOfTwo = 1
         while (nextPowerOfTwo < length) {
@@ -273,6 +327,33 @@ class AnalyzerService(
             return paddedData
         }
         return data
+    }
+
+
+
+    fun test2(file: File) {
+
+        val audioInputStream = AudioSystem.getAudioInputStream(file)
+        val format = audioInputStream.format
+
+        // 읽을 샘플 수 설정 (1초 분량의 샘플)
+        val bufferSize = format.frameSize * format.frameRate.toInt()
+        val buffer = ByteArray(bufferSize)
+
+        var sum = 0.0
+        var count = 0
+
+        // 파일에서 반복하여 샘플을 읽고 RMS 에너지 계산
+        var bytesRead: Int
+        while (audioInputStream.read(buffer).also { bytesRead = it } != -1) {
+            for (i in 0 until bytesRead step format.frameSize) {
+                // Convert bytes to signed 16-bit samples
+                val sample = buffer[i].toInt() or (buffer[i + 1].toInt() shl 8)
+                sum += sample * sample
+                count++
+            }
+        }
+        val rms = sqrt(sum / count)
     }
 
 

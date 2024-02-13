@@ -45,15 +45,19 @@ fun HTML.index() = layout {
 
 fun charts(analyzerDto: AudioAnalyzerDto): String {
 
-    val (waveForm, fft) = analyzerDto
+    val (waveForm, fft, stft, rms) = analyzerDto
 
     return createHTML().body {
 
         chart(waveForm)
         chart(fft)
+        chart(stft)
+        chart(rms)
 
         chartJsScript(waveForm.xValues, waveForm.yValues, waveForm.label)
         chartJsScript(fft.xValues, fft.yValues, fft.label)
+        chartJsScript(stft.xValues, stft.yValues, stft.label)
+        chartJsScript(rms.xValues, rms.yValues, rms.label)
     }
 }
 
@@ -81,7 +85,9 @@ private fun BODY.chartJsScript(
         unsafe {
             raw(
                 """                
-                  console.log($xValues)  
+                  console.log($xValues)
+                  console.log('======================================')                     
+                  console.log($yValues)  
                                           
                   const $label = document.getElementById('$label');
 

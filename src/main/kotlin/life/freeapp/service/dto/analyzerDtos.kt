@@ -11,4 +11,6 @@ data class ChartDto(
 data class AudioAnalyzerDto(
     val waveForm: ChartDto,
     val fftData: ChartDto,
+    val stftData: ChartDto,
+    val rmsData: ChartDto,
 )
