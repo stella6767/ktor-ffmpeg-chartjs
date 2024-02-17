@@ -9,11 +9,8 @@ import io.ktor.http.content.*
 import life.freeapp.plugins.logger
 import life.freeapp.service.dto.AudioAnalyzerDto
 import life.freeapp.service.dto.ChartDto
-import org.apache.commons.math3.complex.Complex
-import org.apache.commons.math3.transform.DftNormalization
-import org.apache.commons.math3.transform.FastFourierTransformer
-import org.apache.commons.math3.transform.TransformType
 import readAudioData
+import readAudioData2
 import timesLike
 import java.io.File
 import java.text.SimpleDateFormat
@@ -69,12 +66,9 @@ class AnalyzerService(
 
 
         val audioInputStream = AudioSystem.getAudioInputStream(resamplingFile)
+        val audioData: DoubleArray = readAudioData2(audioInputStream)
 
-        val audioData: DoubleArray = readAudioData(audioInputStream)
-
-
-
-        val rmsData = getRmsEnergy(resamplingFile)
+        val rmsData = getRmsEnergy(audioData)
         val maxRms = rmsData.yValues.maxOrNull() ?: Double.NaN
 
         return AudioAnalyzerDto(
@@ -82,8 +76,8 @@ class AnalyzerService(
             truePeak = getIntegratedLoudness(audioData),
             loudness = calculateTruePeak(audioData),
             waveForm = getWaveformEnergyFromFile(resamplingFile),
-            fftData = getFftDataFromAudioFile(resamplingFile),
-            stftData = getSpectrumDataFromFile(resamplingFile),
+            fftData = getFftDataFromAudioFile(audioData),
+            stftData = getSpectrumDataFromFile(audioData),
             rmsData = rmsData
         )
 
@@ -114,29 +108,8 @@ class AnalyzerService(
 
 
 
-    private fun getRmsEnergy(file: File): ChartDto {
+    private fun getRmsEnergy(audioData: DoubleArray): ChartDto {
 
-        val audioInputStream = AudioSystem.getAudioInputStream(file)
-        // 오디오 데이터를 읽기 위한 바이트 배열
-        val buffer = ByteArray(audioInputStream.available())
-        var bytesRead = 0
-
-        // 오디오 데이터를 바이트 배열로 읽어오기
-        while (audioInputStream.available() > 0) {
-            bytesRead += audioInputStream.read(buffer, bytesRead, buffer.size - bytesRead)
-        }
-
-        // 읽은 바이트 배열을 double 배열로 변환
-        val audioData = DoubleArray(bytesRead / 2)  // 16-bit PCM이므로 2로 나누어야 함
-
-        // 16-bit PCM 데이터를 double로 변환
-        for (i in 0 until bytesRead / 2) {
-            val sample = (buffer[i * 2 + 1].toInt() shl 8 or (buffer[i * 2].toInt() and 0xFF)).toDouble()
-            audioData[i] = sample / 32768.0  // Normalize to range [-1.0, 1.0]
-        }
-
-        // AudioInputStream 닫기
-        audioInputStream.close()
 
         val rms = calculateRMS(audioData)
         val times = timesLike(rms, 1378)
@@ -152,12 +125,8 @@ class AnalyzerService(
 
 
     private fun getSpectrumDataFromFile(
-        audioFile: File,
-        windowSize: Int = 512,
+        audioData: DoubleArray,
     ): ChartDto {
-
-        val audioInputStream = AudioSystem.getAudioInputStream(audioFile)
-        val audioData: DoubleArray = readAudioData(audioInputStream)
 
         // Compute STFT
         val dbData = calculateSTFT(audioData)
@@ -173,13 +142,10 @@ class AnalyzerService(
 
 
 
-    private fun getFftDataFromAudioFile(file: File): ChartDto {
+    private fun getFftDataFromAudioFile(audioData: DoubleArray): ChartDto {
 
-        val audioInputStream = AudioSystem.getAudioInputStream(file)
-        val audioData: DoubleArray = readAudioData(audioInputStream)
 
         val (doubles, doubles1) = calculateFFT(audioData)
-
 
         return ChartDto(
             xValues = doubles.toList().filterIndexed { index, _ -> index % 100 == 0 },

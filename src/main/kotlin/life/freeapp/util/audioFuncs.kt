@@ -10,89 +10,7 @@ import javax.sound.sampled.AudioInputStream
 import kotlin.math.*
 
 
-//fun calculateSTFT(
-//    audioData: DoubleArray,
-//    windowSize: Int,
-//    hopSize: Int = windowSize / 4
-//): Array<DoubleArray> {
-//
-//    val sampleRate = 22050
-//    val startIdx = sampleRate / 4
-//    val endIdx = sampleRate / 2
-//    val slicedY = audioData.copyOfRange(startIdx, endIdx)
-//
-//
-//    val stftData = Array(windowSize / 2 + 1) { DoubleArray(slicedY.size / hopSize + 1) }
-//    val transformer = FastFourierTransformer(
-//        DftNormalization.STANDARD
-//    )
-//
-//    for (i in 0 until slicedY.size step hopSize) {
-//        val slice = slicedY.copyOfRange(i, minOf(i + windowSize, slicedY.size))
-//
-//        // Apply window function (Hamming window)
-//        val window = DoubleArray(windowSize) { 0.54 - 0.46 * cos(2 * PI * it / (windowSize - 1)) }
-//        val windowedSlice = slice.mapIndexed { index, value -> value * window[index] }.toDoubleArray()
-//
-//        val paddedSamples = padToNextPowerOfTwo(windowedSlice)
-//
-//        val spectrum =
-//            transformer.transform(paddedSamples, TransformType.FORWARD)
-//
-//        for (j in 0 until minOf(spectrum.size, stftData.size)) {
-//            stftData[j][i / hopSize] = spectrum[j].abs()
-//        }
-//    }
-//
-//    return stftData
-//}
 
-fun transform(
-    audioData: DoubleArray,
-    windowSize: Int,
-    hopSize: Int = windowSize / 4
-): DoubleArray {
-
-    val sampleSize = 22050 //power ^ 2
-    val sampleRate = 22050.0f
-
-    val Fs = sampleSize.toDouble()
-
-    var frequency = 0.0
-    // sin 샘플 데이터를 위한 변수
-    val Ts = 1 / Fs
-    val t = DoubleArray(sampleSize)
-    val input = DoubleArray(sampleSize)
-
-    for (i in 0 until sampleSize) {
-        t[i] = Ts * i
-    }
-    for (i in 0 until sampleSize) {
-        input[i] = 2 * sin(2 * PI * 4 * t[i])
-    }
-
-    val tempConversion = DoubleArray(input.size / 2)
-    //100 is not a power of 2, consider padding for fix | 2의 거듭제곱의 개수로 해야함
-    val fft = FastFourierTransformer(DftNormalization.STANDARD)
-
-    try {
-        val complx: Array<Complex> = fft.transform(input, TransformType.FORWARD)
-        for (i in 0 until (complx.size / 2)) {           // 대칭되는 값을 제외하기위해 절반만을 사용
-            val rr = (complx[i].real) / sampleSize * 2 // maginute값 계산을 위한 마사지
-            val ri = (complx[i].imaginary) / sampleSize * 2 // maginute값 계산을 위한 마사지
-            tempConversion[i] = sqrt((rr * rr) + (ri * ri)) // maginute계산
-            val mag = tempConversion[i]
-            frequency = ((sampleRate * i) / sampleSize).toDouble() // frequency계산
-            println(frequency.toString() + "\t" + mag)
-        }
-    } catch (e: IllegalArgumentException) {
-        println(e)
-    }
-
-
-
-    return tempConversion
-}
 
 fun calculateRMS(y: DoubleArray): DoubleArray {
     val windowSize = 1024  // Choose an appropriate window size
@@ -131,21 +49,6 @@ fun amplitudeToDB(rmsValues: DoubleArray): DoubleArray {
 }
 
 
-private fun padToNextPowerOfTwo(data: DoubleArray): DoubleArray {
-    var length = data.size
-    var nextPowerOfTwo = 1
-    while (nextPowerOfTwo < length) {
-        nextPowerOfTwo *= 2
-    }
-    if (nextPowerOfTwo != length) {
-        val paddedData = DoubleArray(nextPowerOfTwo)
-        for (i in data.indices) {
-            paddedData[i] = data[i]
-        }
-        return paddedData
-    }
-    return data
-}
 
 
 fun readAudioData(audioInputStream: AudioInputStream): DoubleArray {
@@ -160,38 +63,30 @@ fun readAudioData(audioInputStream: AudioInputStream): DoubleArray {
     return audioData
 }
 
-internal fun calculateSTFT2(
-    audioData: DoubleArray,
-    n_fft: Int = 512,
-    hopLength: Int = n_fft / 4
-): DoubleArray {
-    val transformer = FastFourierTransformer(DftNormalization.STANDARD)
-    //val numFrames = 1 + (audioData.size - n_fft) / hopLength
 
-    val sampleRate = 1373
-    val startIdx = sampleRate / 4
-    val endIdx = sampleRate / 2
-    val slicedY = Arrays.copyOfRange(audioData, startIdx, endIdx)
+fun readAudioData2(audioInputStream: AudioInputStream): DoubleArray {
+    val buffer = ByteArray(audioInputStream.available())
+    var bytesRead = 0
 
-    //val toTypedArray = slicedY.map { Complex(it, 0.0) }.toTypedArray()
-
-    val paddedSamples = if (slicedY.size < n_fft) {
-        val padding = DoubleArray(n_fft - slicedY.size)
-        slicedY + padding
-    } else {
-        slicedY.sliceArray(0 until n_fft)
+    // 오디오 데이터를 바이트 배열로 읽어오기
+    while (audioInputStream.available() > 0) {
+        bytesRead += audioInputStream.read(buffer, bytesRead, buffer.size - bytesRead)
     }
 
-    val spectrum =
-        transformer.transform(paddedSamples, TransformType.FORWARD)
+    // 읽은 바이트 배열을 double 배열로 변환
+    val audioData = DoubleArray(bytesRead / 2)  // 16-bit PCM이므로 2로 나누어야 함
 
-    val data = DoubleArray(spectrum.size) { abs(spectrum[it].abs()) }
+    // 16-bit PCM 데이터를 double로 변환
+    for (i in 0 until bytesRead / 2) {
+        val sample = (buffer[i * 2 + 1].toInt() shl 8 or (buffer[i * 2].toInt() and 0xFF)).toDouble()
+        audioData[i] = sample / 32768.0  // Normalize to range [-1.0, 1.0]
+    }
 
-    val dbData = DoubleArray(data.size) { 10 * log10(data[it]) }
+    // AudioInputStream 닫기
+    audioInputStream.close()
 
-    return dbData
+    return audioData
 }
-
 
 fun calculateSTFT(y: DoubleArray, n_fft: Int = 512): DoubleArray {
 

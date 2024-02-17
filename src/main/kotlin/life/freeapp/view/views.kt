@@ -61,7 +61,6 @@ fun charts(analyzerDto: AudioAnalyzerDto): String {
         chartJsScript(analyzerDto.fftData.xValues, analyzerDto.fftData.yValues, analyzerDto.fftData.label)
         chartJsScript(analyzerDto.stftData.xValues, analyzerDto.stftData.yValues, analyzerDto.stftData.label)
         chartJsScript(analyzerDto.rmsData.xValues, analyzerDto.rmsData.yValues, analyzerDto.rmsData.label)
-
     }
 }
 
