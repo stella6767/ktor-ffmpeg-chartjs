@@ -49,15 +49,19 @@ fun charts(analyzerDto: AudioAnalyzerDto): String {
 
     return createHTML().body {
 
-        chart(waveForm)
-        chart(fft)
-        chart(stft)
-        chart(rms)
 
-        chartJsScript(waveForm.xValues, waveForm.yValues, waveForm.label)
-        chartJsScript(fft.xValues, fft.yValues, fft.label)
-        chartJsScript(stft.xValues, stft.yValues, stft.label)
-        chartJsScript(rms.xValues, rms.yValues, rms.label)
+        tableComponent(analyzerDto.rms, analyzerDto.loudness, analyzerDto.truePeak)
+
+        chart(analyzerDto.waveForm)
+        chart(analyzerDto.fftData)
+        chart(analyzerDto.stftData)
+        chart(analyzerDto.rmsData)
+
+        chartJsScript(analyzerDto.waveForm.xValues, analyzerDto.waveForm.yValues, analyzerDto.waveForm.label)
+        chartJsScript(analyzerDto.fftData.xValues, analyzerDto.fftData.yValues, analyzerDto.fftData.label)
+        chartJsScript(analyzerDto.stftData.xValues, analyzerDto.stftData.yValues, analyzerDto.stftData.label)
+        chartJsScript(analyzerDto.rmsData.xValues, analyzerDto.rmsData.yValues, analyzerDto.rmsData.label)
+
     }
 }
 
@@ -70,6 +74,72 @@ fun BODY.chart(chartDto: ChartDto) {
         }
     }
 }
+
+
+
+
+fun BODY.tableComponent(rms: Double, loudness: Double, truePeak: Double) {
+    div {
+        classes = setOf("flex flex-col")
+        div {
+            classes = setOf("overflow-x-auto sm:-mx-6 lg:-mx-8")
+            div {
+                classes = setOf("inline-block min-w-full py-2 sm:px-6 lg:px-8")
+
+                div {
+                    classes = setOf("overflow-hidden")
+
+                    table {
+                        classes = setOf("min-w-full text-left text-sm font-light")
+
+                        tbody {
+                            tr {
+                                classes = setOf("border-b dark:border-neutral-500")
+                                td {
+                                    classes = setOf("whitespace-nowrap px-6 py-4 font-medium")
+                                    +"rms"
+
+                                }
+                                td {
+                                    classes = setOf("whitespace-nowrap px-6 py-4")
+                                    +"${rms}"
+                                }
+                            }
+                            tr {
+                                classes = setOf("border-b dark:border-neutral-500")
+                                td {
+                                    classes = setOf("whitespace-nowrap px-6 py-4 font-medium")
+                                    +"loudness"
+
+                                }
+                                td {
+                                    classes = setOf("whitespace-nowrap px-6 py-4")
+                                    +"${loudness}"
+                                }
+                            }
+                            tr {
+                                classes = setOf("border-b dark:border-neutral-500")
+                                td {
+                                    classes = setOf("whitespace-nowrap px-6 py-4 font-medium")
+                                    +"truePeak"
+                                }
+                                td {
+                                    classes = setOf("whitespace-nowrap px-6 py-4")
+                                    +"${truePeak}"
+                                }
+                            }
+                        }
+                    }
+
+                }
+            }
+
+        }
+
+    }
+}
+
+
 
 
 fun HtmlBlockTag.test() {
@@ -120,7 +190,9 @@ fun HTML.layout(body: BODY.() -> Unit) {
             integrity = "sha384-D1Kt99CQMDuVetoL1lrYwg5t+9QdHe7NLX/SoJYkXDFfX37iInKRy5xLSi8nO7UC"
             attributes["crossorigin"] = "anonymous"
         }
-
+        script {
+            src = "https://cdn.tailwindcss.com"
+        }
         link(rel = "icon", type = ContentType.Image.JPEG.toString(), href = "/static/favicon.jpeg")
         link(rel = "shortcut icon", type = ContentType.Image.JPEG.toString(), href = "/static/favicon.jpeg")
         link(rel = "stylesheet", href = "https://cdn.simplecss.org/simple.min.css")

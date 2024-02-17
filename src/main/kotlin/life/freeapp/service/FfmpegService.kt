@@ -31,7 +31,7 @@ class FfmpegService(
 
         try {
             val builder = createFfmpegBuilder(file, outPath)
-            builder.setAudioSampleRate(22050)
+            builder.setAudioSampleRate(1373)
             executor.createJob(builder.done()) { p ->
                 if (p.isEnd) {
                     log.info("make success")

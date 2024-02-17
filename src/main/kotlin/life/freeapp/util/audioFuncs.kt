@@ -1,8 +1,10 @@
+import com.github.psambit9791.jdsp.transform.FastFourier
+import com.github.psambit9791.jdsp.transform.ShortTimeFourier
+import com.github.psambit9791.jdsp.transform._Fourier
 import org.apache.commons.math3.complex.Complex
 import org.apache.commons.math3.transform.DftNormalization
 import org.apache.commons.math3.transform.FastFourierTransformer
 import org.apache.commons.math3.transform.TransformType
-import java.io.IOException
 import java.util.*
 import javax.sound.sampled.AudioInputStream
 import kotlin.math.*
@@ -91,6 +93,7 @@ fun transform(
 
     return tempConversion
 }
+
 fun calculateRMS(y: DoubleArray): DoubleArray {
     val windowSize = 1024  // Choose an appropriate window size
     val hopLength = windowSize / 4  // Choose an appropriate hop length
@@ -145,7 +148,7 @@ private fun padToNextPowerOfTwo(data: DoubleArray): DoubleArray {
 }
 
 
- fun readAudioData(audioInputStream: AudioInputStream): DoubleArray {
+fun readAudioData(audioInputStream: AudioInputStream): DoubleArray {
     val audioBytes = audioInputStream.readAllBytes()
     val audioData = DoubleArray(audioBytes.size / 2)
 
@@ -157,43 +160,93 @@ private fun padToNextPowerOfTwo(data: DoubleArray): DoubleArray {
     return audioData
 }
 
-internal fun calculateSTFT(audioData: DoubleArray,
-                           windowSize: Int = 512,
-                           hopSize: Int = windowSize / 4): Array<DoubleArray> {
+internal fun calculateSTFT2(
+    audioData: DoubleArray,
+    n_fft: Int = 512,
+    hopLength: Int = n_fft / 4
+): DoubleArray {
     val transformer = FastFourierTransformer(DftNormalization.STANDARD)
-    val numFrames = 1 + (audioData.size - windowSize) / hopSize
-    val stftData = Array(numFrames) {
-        DoubleArray(
-            windowSize / 2 + 1
-        )
+    //val numFrames = 1 + (audioData.size - n_fft) / hopLength
+
+    val sampleRate = 1373
+    val startIdx = sampleRate / 4
+    val endIdx = sampleRate / 2
+    val slicedY = Arrays.copyOfRange(audioData, startIdx, endIdx)
+
+    //val toTypedArray = slicedY.map { Complex(it, 0.0) }.toTypedArray()
+
+    val paddedSamples = if (slicedY.size < n_fft) {
+        val padding = DoubleArray(n_fft - slicedY.size)
+        slicedY + padding
+    } else {
+        slicedY.sliceArray(0 until n_fft)
     }
 
-    for (i in 0 until numFrames) {
-        val startIdx = i * hopSize
-        val endIdx = min((startIdx + windowSize).toDouble(), audioData.size.toDouble()).toInt()
-        val slice = Arrays.copyOfRange(audioData, startIdx, endIdx)
+    val spectrum =
+        transformer.transform(paddedSamples, TransformType.FORWARD)
 
-        // Apply window function (Hamming window)
-        val window = DoubleArray(windowSize)
-        for (j in 0 until windowSize) {
-            window[j] = 0.54 - 0.46 * cos(2 * Math.PI * j / (windowSize - 1))
-        }
-        val windowedSlice = DoubleArray(windowSize)
-        for (j in 0 until windowSize) {
-            windowedSlice[j] = slice[j] * window[j]
-        }
+    val data = DoubleArray(spectrum.size) { abs(spectrum[it].abs()) }
 
-        // Compute FFT
-        val spectrum = transformer.transform(windowedSlice, TransformType.FORWARD)
+    val dbData = DoubleArray(data.size) { 10 * log10(data[it]) }
 
-        // Store magnitude of spectrum
-        for (j in stftData[i].indices) {
-            stftData[i][j] = spectrum[j].abs()
-        }
-    }
-
-    return stftData
+    return dbData
 }
 
+
+fun calculateSTFT(y: DoubleArray, n_fft: Int = 512): DoubleArray {
+
+    val sr = 1378 // Sample rate
+    val windowSize = 1024  // Choose an appropriate window size
+    val hopLength = windowSize / 4  // Choose an appropriate hop length
+//    val sliceStart = sr / 4
+//    val sliceEnd = sr / 2
+
+    // Compute the STFT
+    val stft = ShortTimeFourier(y, n_fft, hopLength)
+    stft.transform()
+    val spectrogram = stft.spectrogram(true)
+
+// Calculate absolute values of the spectrogram
+    val data = Array(spectrogram.size) { DoubleArray(spectrogram[0].size) }
+    for (i in spectrogram.indices) {
+        for (j in spectrogram[i].indices) {
+            data[i][j] = abs(spectrogram[i][j])
+        }
+    }
+
+    // Calculate mean amplitude to dB
+    val dbData = DoubleArray(data.size) { idx ->
+        var sum = 0.0
+        for (value in data[idx]) {
+            sum += value
+        }
+        10 * log10(sum / data[idx].size)
+    }
+
+
+    return dbData
+}
+
+
+fun calculateFFT(y: DoubleArray, n_fft: Int = 512): Pair<DoubleArray, DoubleArray> {
+
+    val sampleRate = 1378 // Sample rate
+    val windowSize = 1024  // Choose an appropriate window size
+    val hopLength = windowSize / 4  // Choose an appropriate hop length
+
+    // Compute FFT
+    val dft: _Fourier = FastFourier(y) //Works well for longer signals (>200 points)
+    dft.transform()
+    val onlyPositive = true
+    val magnitude = dft.getMagnitude(onlyPositive) //Positive Absolute
+
+    val f =
+        (0 until magnitude.size).map { it.toDouble() / y.size * sampleRate }.toDoubleArray()
+
+    val leftSpectrum = magnitude.copyOfRange(0, magnitude.size / 2)
+    val leftF = f.copyOfRange(0, f.size / 2)
+
+    return Pair(leftF, leftSpectrum)
+}
 
 

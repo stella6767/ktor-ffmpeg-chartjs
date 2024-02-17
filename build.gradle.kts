@@ -33,6 +33,9 @@ dependencies {
 
 
 
+    implementation("com.github.psambit9791:jdsp:3.0.0")
+
+
     implementation("io.ktor:ktor-server-core-jvm")
     implementation("io.ktor:ktor-server-host-common-jvm")
     implementation("io.ktor:ktor-server-cors-jvm")
