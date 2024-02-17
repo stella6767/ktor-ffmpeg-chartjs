@@ -1,5 +1,9 @@
 package life.freeapp.service
 
+
+import amplitudeToDB
+import calculateRMS
+import calculateSTFT
 import io.ktor.http.content.*
 import life.freeapp.plugins.logger
 import life.freeapp.service.dto.AudioAnalyzerDto
@@ -8,10 +12,11 @@ import org.apache.commons.math3.complex.Complex
 import org.apache.commons.math3.transform.DftNormalization
 import org.apache.commons.math3.transform.FastFourierTransformer
 import org.apache.commons.math3.transform.TransformType
+import readAudioData
+import timesLike
 import java.io.File
 import java.text.SimpleDateFormat
 import java.util.*
-import javax.sound.sampled.AudioInputStream
 import javax.sound.sampled.AudioSystem
 import kotlin.math.*
 
@@ -60,16 +65,14 @@ class AnalyzerService(
 
         val resamplingFile = ffmpegService.resamplingFile(file)
 
-
         part.dispose()
-
 
 
         return AudioAnalyzerDto(
             waveForm = getWaveformEnergyFromFile(resamplingFile),
             fftData = getFftDataFromAudioFile(resamplingFile),
             stftData = getSpectrumDataFromFile(resamplingFile),
-            getRmsEnergy(resamplingFile)
+            rmsData = getRmsEnergy(resamplingFile)
 
         )
     }
@@ -85,12 +88,9 @@ class AnalyzerService(
     }
 
 
-    fun getRmsEnergy(file: File): ChartDto {
+    private fun getRmsEnergy(file: File): ChartDto {
 
         val audioInputStream = AudioSystem.getAudioInputStream(file)
-        // 오디오 포맷 정보 가져오기
-        val format = audioInputStream.format
-
         // 오디오 데이터를 읽기 위한 바이트 배열
         val buffer = ByteArray(audioInputStream.available())
         var bytesRead = 0
@@ -116,7 +116,6 @@ class AnalyzerService(
         val times = timesLike(rms, 1378)
         val rmsDB = amplitudeToDB(rms)
 
-
         return ChartDto(
             xValues = times.toList(),
             yValues = rmsDB.toList(),
@@ -124,97 +123,32 @@ class AnalyzerService(
         )
     }
 
-    private fun timesLike(rmsValues: DoubleArray, sr: Int): DoubleArray {
-        val hopLength = 256  // Assuming hop length used during calculation of RMS
-        return DoubleArray(rmsValues.size) { it * hopLength.toDouble() / sr.toDouble() }
-    }
-
-    private fun amplitudeToDB(rmsValues: DoubleArray): DoubleArray {
-        val refValue = 1.0  // Reference value for dB calculation (default: 1.0)
-        val amin = 1e-10  // Minimum amplitude (default: 1e-10)
-        return DoubleArray(rmsValues.size) { 20.0 * log10(maxOf(amin, rmsValues[it]) / refValue) }
-    }
-
-    private fun calculateRMS(y: DoubleArray): DoubleArray {
-        val windowSize = 1024  // Choose an appropriate window size
-        val hopLength = windowSize / 4  // Choose an appropriate hop length
-
-        val numWindows = (y.size - windowSize) / hopLength + 1
-        val rmsValues = DoubleArray(numWindows)
-
-        for (i in 0 until numWindows) {
-            val startIdx = i * hopLength
-            val endIdx = startIdx + windowSize
-            var sumSquared = 0.0
-
-            for (j in startIdx until endIdx) {
-                if (j < y.size) {
-                    sumSquared += y[j].pow(2)
-                }
-            }
-
-            val rms = sqrt(sumSquared / windowSize)
-            rmsValues[i] = rms
-        }
-
-        return rmsValues
-    }
-
-
 
     private fun getSpectrumDataFromFile(
         audioFile: File,
-        windowSize: Int = 1024,
-        hopSize: Int = windowSize / 2
+        windowSize: Int = 512,
     ): ChartDto {
 
-        val audioInputStream: AudioInputStream = AudioSystem.getAudioInputStream(audioFile)
-        val audioBytes = audioInputStream.readAllBytes()
-        val audioData = audioBytes.map { it.toDouble() }.toDoubleArray()
+        val audioInputStream = AudioSystem.getAudioInputStream(audioFile)
+        val audioData: DoubleArray = readAudioData(audioInputStream)
 
-        // Perform STFT and calculate decibel values
-        val sampleRate = audioInputStream.format.sampleRate.toDouble()
-        val windowSize = 1024 // Adjust as needed
-        val overlap = windowSize / 2 // Adjust as needed
-        val fft = FastFourierTransformer(DftNormalization.STANDARD)
-        val hopSize = windowSize - overlap
-        val numFrames = (audioData.size - windowSize) / hopSize + 1
-        val xValues = mutableListOf<Double>()
-        val yValues = mutableListOf<Double>()
 
-        for (i in 0 until numFrames) {
-            val startIdx = i * hopSize
-            val frame = audioData.copyOfRange(startIdx, startIdx + windowSize)
-            val fftResult = fft.transform(frame, TransformType.FORWARD)
+        // Compute STFT
+        val stftData = calculateSTFT(audioData)
 
-            // Convert FFT result to magnitude and calculate decibel
-            val magnitude = fftResult.map { it.abs() }
-            val decibel = magnitude.map { 20 * log10(it) }
+        amplitudeToDB(stftData)
 
-            // Add time value to xValues array (you can use frame index or another time value)
-            xValues.add(i.toDouble())
-            // Add decibel values to yValues array
-            yValues.addAll(decibel)
-        }
+
+        val data = stftData.map { it.average() }.toDoubleArray()
+        val times = DoubleArray(data.size) { it * (windowSize / 4).toDouble() / 22050 }
 
         return ChartDto(
-            xValues = xValues,
-            yValues = yValues,
+            xValues = times.toList(),
+            yValues = data.toList(),
             "Spectrum"
         )
     }
 
-    private fun applyWindow(data: ByteArray, windowSize: Int, bytesPerSample: Int): DoubleArray {
-        val windowedData = DoubleArray(windowSize)
-        for (i in 0 until windowSize) {
-            var value = 0
-            for (j in 0 until bytesPerSample) {
-                value = value or ((data[i * bytesPerSample + j].toInt() and 0xFF) shl (j * 8))
-            }
-            windowedData[i] = value * hammingWindow(i, windowSize)
-        }
-        return windowedData
-    }
 
     private fun hammingWindow(n: Int, windowSize: Int): Double {
         return 0.54 - 0.46 * cos(2 * Math.PI * n / (windowSize - 1))
@@ -348,7 +282,6 @@ class AnalyzerService(
     }
 
 
-
     fun test2(file: File) {
 
         val audioInputStream = AudioSystem.getAudioInputStream(file)
@@ -373,7 +306,6 @@ class AnalyzerService(
         }
         val rms = sqrt(sum / count)
     }
-
 
 
 }
